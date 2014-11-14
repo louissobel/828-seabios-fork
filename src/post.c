@@ -194,6 +194,14 @@ startBoot(void)
     call16_int(0x19, &br);
 }
 
+void
+tpm_setup(void)
+{
+  u32 base = 0xFED40000;
+  u32 did = *((u32 *)(base|0x0F00));
+  printf("Setting up TPM: %08x\n", did);
+}
+
 // Main setup code.
 static void
 maininit(void)
@@ -216,6 +224,9 @@ maininit(void)
         device_hardware_setup();
         wait_threads();
     }
+
+    // Setup TPM
+    tpm_setup();
 
     // Run option roms
     optionrom_setup();

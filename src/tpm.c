@@ -290,22 +290,23 @@ tpm_setup(void)
   } else {
     printf("failed... %d\n", e);
   }
+  tpm_dump_pcrs();
 
-  // Measure some shit, stick it in PCR 0. A bunch of null bytes.
-  u8 data[80];
+  // Measure BIOS ID, stick it in PCR 0.
+  u8 data[7] = {'S', 'E', 'A', 'B', 'I', 'O', 'S'};
   u8 digest[20];
   struct tpm_pcr pcr2 = {
     .index = 0
   };
-  int i;
-  for (i=0;i<80;i++) data[i] = '\xBB';
-  tpm_measure(data, 80, &pcr2, digest);
+  tpm_measure(data, 7, &pcr2, digest);
 
+  int i;
   printf("DIGEST: ");
   for (i=0;i<20;i++) printf("%02x", digest[i]);
   printf("\n");
-
-  tpm_dump_pcrs();
+  printf("PCR[0]: ");
+  for (i=0;i<20;i++) printf("%02x", pcr2.value[i]);
+  printf("\n");
 }
 
 u32

@@ -16,6 +16,7 @@
 #include "usb.h" // struct usbdevice_s
 #include "csm.h" // csm_bootprio_*
 #include "list.h" // hlist_node
+#include "tpm.h" // tpm_measure
 
 
 /****************************************************************
@@ -573,6 +574,26 @@ boot_disk(u8 bootdrv, int checksig)
             printf("Boot failed: not a bootable disk\n\n");
             return;
         }
+    }
+
+    u8* boot_sector = MAKE_FLATPTR(bootseg, 0);
+    struct tpm_pcr pcr = {
+      .index = 4
+    };
+    u8 digest[TPM_DIGEST_SIZE];
+    u32 e = tpm_measure(boot_sector, DISK_SECTOR_SIZE, &pcr, digest);
+    if (e == 0) {
+      int j;
+      printf("Measured disk boot sector: ");
+      for (j=0;j<TPM_DIGEST_SIZE;j++) printf("%02x", digest[j]);
+      printf("\n");
+
+      printf("PCR[4]: ");
+      for (j=0;j<TPM_DIGEST_SIZE;j++) printf("%02x", pcr.value[j]);
+      printf("\n");
+    } else {
+      printf("Error measuring boot!: %d\n", e);
+      return;
     }
 
     /* Canonicalize bootseg:bootip */

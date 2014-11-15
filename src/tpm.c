@@ -149,6 +149,84 @@ tpm_call_physicalsetdeactivated(u8 state)
   return be32_to_cpu(res_header.errcode);
 }
 
+static u32
+tpm_call_sha1start(u32 *max_num_bytes_store)
+{
+  struct tpm_request_header req_header;
+  struct tpm_response_header res_header;
+  struct tpm_sha1start_response res;
+  req_header.tag = cpu_to_be16(TPM_TAG_RQU_COMMAND);
+  req_header.ordinal = cpu_to_be32(TPM_ORD_SHA1START);
+  req_header.len = cpu_to_be32(sizeof(req_header));
+
+  tpm_call_generic(&req_header, NULL, 0, &res_header, &res, sizeof(res));
+  *max_num_bytes_store = res.max_num_bytes;
+  return be32_to_cpu(res_header.errcode);
+}
+
+static u32
+tpm_call_sha1update(u8 *data, size_t len) {
+  if (len > TPM_SHA1UPDATE_MAX_DATA) return TPM_BAD_PARAMETER;
+
+  struct tpm_request_header req_header;
+  struct tpm_response_header res_header;
+  struct tpm_sha1update_request req;
+  req_header.tag = cpu_to_be16(TPM_TAG_RQU_COMMAND);
+  req_header.ordinal = cpu_to_be32(TPM_ORD_SHA1UPDATE);
+  size_t req_len = sizeof(req.num_bytes) + len;
+  req_header.len = cpu_to_be32(sizeof(req_header) + req_len);
+  req.num_bytes = cpu_to_be32(len);
+  memcpy(req.data, data, len);
+
+  tpm_call_generic(&req_header, &req, req_len, &res_header, NULL, 0);
+  return be32_to_cpu(res_header.errcode);
+}
+
+static u32
+tpm_call_sha1completeextend(u8 *data, size_t len, struct tpm_pcr *pcr, u8 *digest)
+{
+  if (len > TPM_SHA1COMPLETEEXTEND_MAX_DATA) return TPM_BAD_PARAMETER;
+
+  struct tpm_request_header req_header;
+  struct tpm_response_header res_header;
+  struct tpm_sha1completeextend_request req;
+  struct tpm_sha1completeextend_response res;
+  req_header.tag = cpu_to_be16(TPM_TAG_RQU_COMMAND);
+  req_header.ordinal = cpu_to_be32(TPM_ORD_SHA1COMPLETEEXTEND);
+  size_t req_len = sizeof(req.pcr_index) + sizeof(req.num_bytes) + len;
+  req_header.len = cpu_to_be32(sizeof(req_header) + req_len);
+  req.pcr_index = cpu_to_be32(pcr->index);
+  req.num_bytes = cpu_to_be32(len);
+  memcpy(req.data, data, len);
+
+  tpm_call_generic(&req_header, &req, req_len, &res_header, &res, sizeof(res));
+  memcpy(digest, res.digest, TPM_DIGEST_SIZE); // TODO be here too
+  memcpy(pcr->value, res.pcr_value, TPM_DIGEST_SIZE); // TODO be?
+  return be32_to_cpu(res_header.errcode);
+}
+
+static void
+tpm_dump_pcrs(void)
+{
+  u32 e;
+  printf("TPM: dump PCRS:\n");
+  int i, j;
+  struct tpm_pcr pcr;
+  for (i = 0; i<24; i++) { // TODO Parameterize?
+    pcr.index = i;
+    e = tpm_call_pcrread(&pcr);
+    printf("%d: ", i);
+    if (e == 0) {
+      for (j = 0; j<TPM_DIGEST_SIZE; j++) {
+        printf("%02x", pcr.value[j]);
+      }
+      printf("\n");
+    } else {
+      printf("<error:%d>\n", e);
+    }
+  }
+}
+
 void
 tpm_setup(void)
 {
@@ -213,19 +291,47 @@ tpm_setup(void)
     printf("failed... %d\n", e);
   }
 
-  printf("TPM: dump PCRS:\n");
-  int i, j;
-  for (i = 0; i<1; i++) { // TODO Parameterize?
-    pcr.index = i;
-    e = tpm_call_pcrread(&pcr);
-    printf("%d: ", i);
-    if (e == 0) {
-      for (j = 0; j<TPM_DIGEST_SIZE; j++) {
-        printf("%02x", pcr.value[j]);
-      }
-      printf("\n");
-    } else {
-      printf("<error:%d>\n", e);
-    }
+  // Measure some shit, stick it in PCR 0. A bunch of null bytes.
+  u8 data[80];
+  u8 digest[20];
+  struct tpm_pcr pcr2 = {
+    .index = 0
+  };
+  int i;
+  for (i=0;i<80;i++) data[i] = '\xBB';
+  tpm_measure(data, 80, &pcr2, digest);
+
+  printf("DIGEST: ");
+  for (i=0;i<20;i++) printf("%02x", digest[i]);
+  printf("\n");
+
+  tpm_dump_pcrs();
+}
+
+u32
+tpm_measure(u8 *data, size_t len, struct tpm_pcr *pcr, u8 *digest)
+{
+  // Does a measure and extend into given pcr
+  // Returns > 0 on failure
+  u32 e;
+
+  u32 max_num_bytes;
+  e = tpm_call_sha1start(&max_num_bytes);
+  if (e > 0) return e; // TODO do I have to clean up SHA session at all?
+
+  // Ok, so we're going to think of the data in 64 byte chunks,
+  // And make it easy by ignoreing max_num_bytes,,, assuming 1
+  // and < 64 on last one.
+
+  int n_chunks = len / 64; // This many Sha1Updates
+  int leftover = len % 64; // Sent in Sha1Complete
+
+  int chunk_number;
+  for (chunk_number = 0; chunk_number < n_chunks; chunk_number++) {
+    e = tpm_call_sha1update(data + (chunk_number * 64), 64);
+    if (e > 0) return e;
   }
+
+  // Finish it.
+  return tpm_call_sha1completeextend(data + (n_chunks * 64), leftover, pcr, digest);
 }

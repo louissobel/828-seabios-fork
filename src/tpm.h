@@ -14,11 +14,13 @@
 #define TPM_MEMIO_FIFO    __TPM_MEMIO_BASE_OR(0x24)
 
 // Error codes
-#define TPM_ERR_SUCCESS 0x0
+#define TPM_ERR_SUCCESS 0
+#define TPM_DEACTIVATED 6
+#define TPM_DISABLED    7
 
 // Access (locality)
 #define TPM_ACCESS_REQUEST 0x02
-#define TPM_ACCESS_HELD 0x20
+#define TPM_ACCESS_HELD    0x20
 
 // Status bits
 #define TPM_STS_COMMAND_READY 0x40
@@ -30,7 +32,19 @@
 #define TPM_TAG_RSP_COMMAND 0xC4
 
 // Ordinals
-#define TPM_ORD_STARTUP   0x99
+#define TPM_ORD_PCRREAD                 0x15
+#define TPM_ORD_PHYSICALENABLE          0x6F
+#define TPM_ORD_PHYSICALSETDEACTIVATED  0x72
+#define TPM_ORD_STARTUP                 0x99
+#define TPM_ORD_PHYSICALPRESENCE        0x4000000A
+
+// Data structures
+#define TPM_DIGEST_SIZE 20
+
+struct tpm_pcr {
+  u32 index;
+  u8 value[TPM_DIGEST_SIZE];
+};
 
 // Headers
 struct tpm_request_header {
@@ -54,6 +68,29 @@ struct tpm_startup_request {
   u16 startup_type;
 } PACKED;
 
+// PCRRead
+struct tpm_pcrread_request {
+  u32 pcr_index;
+} PACKED;
+
+struct tpm_pcrread_response {
+  u8 pcr_value[TPM_DIGEST_SIZE];
+} PACKED;
+
+// Physical Enable
+#define TPM_PHYSICAL_PRESENCE_CMD_ENABLE 0x20
+#define TPM_PHYSICAL_PRESENCE_PRESENT    0x8
+#define TPM_PHYSICAL_PRESENCE_LOCK       0x4
+struct tpm_physicalpresence_request {
+  u16 presence;
+} PACKED;
+
+// PhysicalSetDeactivated
+struct tpm_physicalsetdeactivated_request {
+  u8 state;
+} PACKED;
+
+/** Whatever **/
 void tpm_setup(void);
 
 #endif

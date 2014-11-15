@@ -25,6 +25,7 @@
 #include "lsi-scsi.h" // lsi_scsi_setup
 #include "esp-scsi.h" // esp_scsi_setup
 #include "megasas.h" // megasas_setup
+#include "tpm.h" // tpm_setup
 #include "post.h" // interface_init
 
 
@@ -192,14 +193,6 @@ startBoot(void)
     memset(&br, 0, sizeof(br));
     br.flags = F_IF;
     call16_int(0x19, &br);
-}
-
-void
-tpm_setup(void)
-{
-  u32 base = 0xFED40000;
-  u32 did = *((u32 *)(base|0x0F00));
-  printf("Setting up TPM: %08x\n", did);
 }
 
 // Main setup code.

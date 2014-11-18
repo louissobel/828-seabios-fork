@@ -582,7 +582,9 @@ boot_disk(u8 bootdrv, int checksig)
     };
     u8 digest[TPM_DIGEST_SIZE];
     u32 e = tpm_measure(boot_sector, DISK_SECTOR_SIZE, &pcr, digest);
-    if (e == 0) {
+    if (e == TPM_NOT_PRESENT) {
+      printf("Unable to measure boot sector: no TPM\n");
+    } else if (e == 0) {
       int j;
       printf("Measured disk boot sector: ");
       for (j=0;j<TPM_DIGEST_SIZE;j++) printf("%02x", digest[j]);

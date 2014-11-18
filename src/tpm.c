@@ -205,6 +205,13 @@ tpm_call_sha1completeextend(u8 *data, size_t len, struct tpm_pcr *pcr, u8 *diges
   return be32_to_cpu(res_header.errcode);
 }
 
+static int
+tpm_is_present(void)
+{
+  // Checks for non-zero vid/did
+  return (readl(TPM_MEMIO_VIDDID) != 0);
+}
+
 static void
 tpm_dump_pcrs(void)
 {
@@ -231,6 +238,11 @@ void
 tpm_setup(void)
 {
   printf("Setting up TPM: %08x\n", readl(TPM_MEMIO_VIDDID));
+
+  if (!tpm_is_present()) {
+    printf("No TPM present!!\n");
+    return;
+  }
 
   // Last thing that happened was init. So take access at locality 0
   // Run startup
@@ -315,6 +327,10 @@ tpm_measure(u8 *data, size_t len, struct tpm_pcr *pcr, u8 *digest)
   // Does a measure and extend into given pcr
   // Returns > 0 on failure
   u32 e;
+
+  if (!tpm_is_present()) {
+    return TPM_NOT_PRESENT;
+  }
 
   u32 max_num_bytes;
   e = tpm_call_sha1start(&max_num_bytes);

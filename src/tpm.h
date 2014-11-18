@@ -18,6 +18,7 @@
 #define TPM_BAD_PARAMETER 3
 #define TPM_DEACTIVATED   6
 #define TPM_DISABLED      7
+#define TPM_NOT_PRESENT   -1
 
 // Access (locality)
 #define TPM_ACCESS_REQUEST 0x02
